@@ -98,14 +98,8 @@ class BaseUserJsonUpload(UsernameMixin, BaseJsonUploadAction):
             check_result = self.username_lookup.check_duplicate(username)
             id_ = cast(int, self.username_lookup.get_field_by_name(username, "id"))
             if check_result == ResultType.FOUND_ID and id_ != 0:
-                old_saml_id = cast(
-                    str, self.username_lookup.get_field_by_name(username, "saml_id")
-                )
-                old_default_password = cast(
-                    str,
-                    self.username_lookup.get_field_by_name(
-                        username, "default_password"
-                    ),
+                old_saml_id, old_default_password = self.get_old_saml_id_and_password(
+                    username, self.username_lookup
                 )
                 self.row_state = ImportState.DONE
                 entry["id"] = id_
@@ -136,12 +130,8 @@ class BaseUserJsonUpload(UsernameMixin, BaseJsonUploadAction):
             id_ = cast(int, self.saml_id_lookup.get_field_by_name(saml_id, "id"))
             if check_result == ResultType.FOUND_ID and id_ != 0:
                 username = self.saml_id_lookup.get_field_by_name(saml_id, "username")
-                old_saml_id = cast(
-                    str, self.saml_id_lookup.get_field_by_name(saml_id, "saml_id")
-                )
-                old_default_password = cast(
-                    str,
-                    self.saml_id_lookup.get_field_by_name(saml_id, "default_password"),
+                old_saml_id, old_default_password = self.get_old_saml_id_and_password(
+                    saml_id, self.saml_id_lookup
                 )
 
                 self.row_state = ImportState.DONE
@@ -174,17 +164,10 @@ class BaseUserJsonUpload(UsernameMixin, BaseJsonUploadAction):
                     username = self.names_email_lookup.get_field_by_name(
                         names_and_email, "username"
                     )
-                    old_saml_id = cast(
-                        str,
-                        self.names_email_lookup.get_field_by_name(
-                            names_and_email, "saml_id"
-                        ),
-                    )
-                    old_default_password = cast(
-                        str,
-                        self.names_email_lookup.get_field_by_name(
-                            names_and_email, "default_password"
-                        ),
+                    old_saml_id, old_default_password = (
+                        self.get_old_saml_id_and_password(
+                            names_and_email, self.names_email_lookup
+                        )
                     )
                     self.row_state = ImportState.DONE
                     entry["id"] = id_
@@ -371,6 +354,20 @@ class BaseUserJsonUpload(UsernameMixin, BaseJsonUploadAction):
                 messages.append(f"Error: '{email}' is not a valid email address.")
 
         return {"state": self.row_state, "messages": messages, "data": entry}
+
+    def get_old_saml_id_and_password(
+        self, value: str | tuple[str, ...], lookup: Lookup
+    ) -> tuple[str, str]:
+        return (
+            cast(
+                str,
+                lookup.get_field_by_name(value, "saml_id"),
+            ),
+            cast(
+                str,
+                lookup.get_field_by_name(value, "default_password"),
+            ),
+        )
 
     def create_usernames(self, data: list[dict[str, Any]]) -> list[dict[str, Any]]:
         usernames: list[str] = []
