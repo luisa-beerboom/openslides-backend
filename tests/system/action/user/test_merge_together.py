@@ -1967,7 +1967,9 @@ class UserMergeTogether(BaseVoteTestCase):
                 "list_of_speakers_enable_pro_contra_speech": True,
                 "list_of_speakers_enable_interposed_question": True,
                 "list_of_speakers_intervention_time": 30,
+                "office_ids": [1, 2, 3, 4, 5],
             },
+            "meeting/2": {"office_ids": [6, 7, 8, 9, 10]},
             "meeting/3": {
                 "motion_block_ids": [],
                 "list_of_speakers_ids": [],
@@ -1977,6 +1979,7 @@ class UserMergeTogether(BaseVoteTestCase):
                 "structure_level_ids": [3, 4],
                 "list_of_speakers_enable_point_of_order_speakers": True,
                 "list_of_speakers_enable_point_of_order_categories": True,
+                "office_ids": [11, 12, 13, 14, 15],
             },
             "structure_level/1": {
                 "name": "A",
@@ -2026,6 +2029,15 @@ class UserMergeTogether(BaseVoteTestCase):
                 f"meeting_user/{id_}": {"speaker_ids": []}
                 for id_ in [12, 14, 15, 33, 34]
             },
+            **{
+                f"office/{next_office_id}": {
+                    "name": "Office1",
+                    "meeting_id": ((next_office_id - 1) // 5) + 1,
+                    "meeting_user_ids": [],
+                    "speaker_ids": [],
+                }
+                for next_office_id in range(1, 3 * 5 + 1)
+            },
         }
         if allow_multiple_speakers:
             for id_ in [1, 3]:
@@ -2045,11 +2057,13 @@ class UserMergeTogether(BaseVoteTestCase):
                     int | None,
                     int | None,
                     dict[str, Any],
+                    int | None,
                 ]
             ],
             next_speaker_id: int = 1,
         ) -> int:
             block_fqid = f"motion_block/{base_id}"
+            next_office_id = (meeting_id - 1) * 5 + 1
             data[f"meeting/{meeting_id}"]["motion_block_ids"].append(base_id)
             data[f"meeting/{meeting_id}"]["list_of_speakers_ids"].append(base_id)
             data[f"structure_level/{meeting_id}"][
@@ -2082,7 +2096,7 @@ class UserMergeTogether(BaseVoteTestCase):
                         "speaker_ids": [],
                         "initial_time": 5,
                         "remaining_time": 5,
-                        "meeting_id": 1,
+                        "meeting_id": meeting_id,
                     },
                     f"structure_level_list_of_speakers/{base_id*2}": {
                         "structure_level_id": meeting_id + 1,
@@ -2090,7 +2104,7 @@ class UserMergeTogether(BaseVoteTestCase):
                         "speaker_ids": [],
                         "initial_time": 5,
                         "remaining_time": 5,
-                        "meeting_id": 1,
+                        "meeting_id": meeting_id,
                     },
                 }
             )
@@ -2103,6 +2117,7 @@ class UserMergeTogether(BaseVoteTestCase):
                     point_of_order_category_id,
                     structure_level_id,
                     additional,
+                    office_id,
                 ) = speaker
                 data[f"meeting/{meeting_id}"]["speaker_ids"].append(next_speaker_id)
                 data[f"meeting_user/{meeting_user_id}"]["speaker_ids"].append(
@@ -2117,6 +2132,21 @@ class UserMergeTogether(BaseVoteTestCase):
                 }
                 if speech_state:
                     speaker_data["speech_state"] = speech_state
+                if office_id:
+                    office_id = next_office_id + office_id - 1
+                    speaker_data["office_id"] = office_id
+                    data[f"office/{office_id}"]["speaker_ids"].append(next_speaker_id)
+                    if office_id not in (
+                        meeting_user_office_ids := data[
+                            f"meeting_user/{meeting_user_id}"
+                        ].get("office_ids", [])
+                    ):
+                        data[f"meeting_user/{meeting_user_id}"]["office_ids"] = list(
+                            {office_id, *meeting_user_office_ids}
+                        )
+                        data[f"office/{office_id}"]["meeting_user_ids"].append(
+                            meeting_user_id
+                        )
                 if point_of_order is not None:
                     speaker_data["point_of_order"] = point_of_order
                 if point_of_order_category_id:
@@ -2147,21 +2177,21 @@ class UserMergeTogether(BaseVoteTestCase):
             1,
             1,
             [
-                (12, 1, None, None, None, 1, {}),
-                (14, 2, None, True, None, 2, {}),  # to merge
-                (14, 5, None, None, None, 1, {}),  # to merge
-                (15, 4, None, None, None, 2, {}),
-                (12, 3, None, True, None, 2, {}),
+                (12, 1, None, None, None, 1, {}, None),
+                (14, 2, None, True, None, 2, {}, None),  # to merge
+                (14, 5, None, None, None, 1, {}, None),  # to merge
+                (15, 4, None, None, None, 2, {}, None),
+                (12, 3, None, True, None, 2, {}, None),
             ],
         )
         next_id = add_list_of_speakers(
             2,
             1,
             [
-                (14, 1, SpeechState.PRO, None, None, None, {}),  # to merge
-                (12, 2, None, True, 2, None, {"note": "ASDF"}),
-                (14, 3, None, True, 2, None, {"note": "ASDF"}),  # to merge
-                (12, 4, SpeechState.PRO, None, None, None, {}),
+                (14, 1, SpeechState.PRO, None, None, None, {}, 1),  # to merge
+                (12, 2, None, True, 2, None, {"note": "ASDF"}, None),
+                (14, 3, None, True, 2, None, {"note": "ASDF"}, None),  # to merge
+                (12, 4, SpeechState.PRO, None, None, None, {}, 1),
             ],
             next_id,
         )
@@ -2169,10 +2199,19 @@ class UserMergeTogether(BaseVoteTestCase):
             3,
             1,
             [
-                (14, 1, SpeechState.PRO, None, None, None, finished_data),  # replaced
-                (12, 2, None, True, 1, None, finished_with_pause_data),
-                (14, 3, None, True, 1, None, {}),  # replaced
-                (12, 4, None, None, None, None, {}),
+                (
+                    14,
+                    1,
+                    SpeechState.PRO,
+                    None,
+                    None,
+                    None,
+                    finished_data,
+                    1,
+                ),  # replaced
+                (12, 2, None, True, 1, None, finished_with_pause_data, None),
+                (14, 3, None, True, 1, None, {}, None),  # replaced
+                (12, 4, None, None, None, None, {}, None),
             ],
             next_id,
         )
@@ -2180,8 +2219,26 @@ class UserMergeTogether(BaseVoteTestCase):
             4,
             3,
             [
-                (33, 2, SpeechState.CONTRA, None, None, None, {}),  # to merge into new
-                (34, 1, SpeechState.CONTRA, None, None, None, {}),  # to merge into new
+                (
+                    33,
+                    2,
+                    SpeechState.CONTRA,
+                    None,
+                    None,
+                    None,
+                    {},
+                    2,
+                ),  # to merge into new
+                (
+                    34,
+                    1,
+                    SpeechState.CONTRA,
+                    None,
+                    None,
+                    None,
+                    {},
+                    2,
+                ),  # to merge into new
             ],
             next_id,
         )
@@ -2189,8 +2246,8 @@ class UserMergeTogether(BaseVoteTestCase):
             5,
             1,
             [
-                (14, 1, SpeechState.INTERVENTION, None, None, None, {}),  # to merge
-                (12, 2, SpeechState.INTERVENTION, None, None, None, {}),
+                (14, 1, SpeechState.INTERVENTION, None, None, None, {}, 3),  # to merge
+                (12, 2, SpeechState.INTERVENTION, None, None, None, {}, 3),
             ],
             next_id,
         )
@@ -2198,7 +2255,7 @@ class UserMergeTogether(BaseVoteTestCase):
             6,
             1,
             [
-                (12, 1, SpeechState.INTERPOSED_QUESTION, None, None, None, {}),
+                (12, 1, SpeechState.INTERPOSED_QUESTION, None, None, None, {}, 4),
                 (
                     14,
                     2,
@@ -2207,6 +2264,7 @@ class UserMergeTogether(BaseVoteTestCase):
                     None,
                     None,
                     {},
+                    4,
                 ),  # to merge
             ],
             next_id,
@@ -2215,8 +2273,8 @@ class UserMergeTogether(BaseVoteTestCase):
             7,
             1,
             [
-                (12, 1, SpeechState.CONTRIBUTION, None, None, None, {}),
-                (14, 2, SpeechState.CONTRIBUTION, None, None, None, {}),  # to merge
+                (12, 1, SpeechState.CONTRIBUTION, None, None, None, {}, 5),
+                (14, 2, SpeechState.CONTRIBUTION, None, None, None, {}, 5),  # to merge
             ],
             next_id,
         )
@@ -2224,8 +2282,8 @@ class UserMergeTogether(BaseVoteTestCase):
             8,
             1,
             [
-                (12, 1, SpeechState.CONTRIBUTION, None, None, None, {}),
-                (14, 2, None, True, None, None, {}),
+                (12, 1, SpeechState.CONTRIBUTION, None, None, None, {}, 5),
+                (14, 2, None, True, None, None, {}, None),
             ],
             next_id,
         )
@@ -2324,7 +2382,8 @@ class UserMergeTogether(BaseVoteTestCase):
             {
                 "speaker_ids": list(
                     range(24 + len(replaced_meeting_1), 26 + len(replaced_meeting_1))
-                )
+                ),
+                "office_ids": [12],
             },
         )
 
@@ -2371,6 +2430,19 @@ class UserMergeTogether(BaseVoteTestCase):
         self.assert_status_code(response, 400)
         self.assertIn(
             "Differing values in field speech_state when merging into speaker/1",
+            response.json["message"],
+        )
+
+    def test_with_speakers_different_office(self) -> None:
+        self.create_speakers_for_test()
+        self.set_models(
+            {"speaker/3": {"office_id": 2}, "office/2": {"speaker_ids": [3]}}
+        )
+
+        response = self.request("user.merge_together", {"id": 2, "user_ids": [3, 4]})
+        self.assert_status_code(response, 400)
+        self.assertIn(
+            "Differing values in field office_id when merging into speaker/1",
             response.json["message"],
         )
 

@@ -40,6 +40,7 @@ class SpeakerCreateAction(
             "note",
             "speech_state",
             "point_of_order_category_id",
+            "office_id",
         ],
         additional_optional_fields={"structure_level_id": required_id_schema},
     )

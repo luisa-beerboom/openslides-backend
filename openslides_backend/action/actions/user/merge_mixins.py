@@ -44,6 +44,7 @@ class SpeakerMergeMixin(BaseMergeMixin):
                     "point_of_order_category_id",
                     "structure_level_list_of_speakers_id",
                     "note",
+                    "office_id",
                 ],
             },
             "meeting_user_id",
@@ -194,6 +195,7 @@ class MeetingUserMergeMixin(
                     "chat_message_ids",
                     "group_ids",
                     "structure_level_ids",
+                    "office_ids",
                 ],
                 "deep_merge": {
                     "assignment_candidate_ids": "assignment_candidate",

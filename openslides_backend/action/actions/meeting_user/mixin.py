@@ -18,6 +18,7 @@ meeting_user_standard_fields = [
     "vote_weight",
     "structure_level_ids",
     "locked_out",
+    "office_ids",
 ]
 
 

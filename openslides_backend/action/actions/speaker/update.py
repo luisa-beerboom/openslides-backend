@@ -30,6 +30,7 @@ class SpeakerUpdate(
             "point_of_order",
             "point_of_order_category_id",
             "note",
+            "office_id",
             *internal_fields,
         ],
         additional_optional_fields={"structure_level_id": optional_id_schema},

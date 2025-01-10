@@ -201,6 +201,9 @@ class MeetingUser(Model):
     structure_level_ids = fields.RelationListField(
         to={"structure_level": "meeting_user_ids"}, equal_fields="meeting_id"
     )
+    office_ids = fields.RelationListField(
+        to={"office": "meeting_user_ids"}, equal_fields="meeting_id"
+    )
 
 
 class Gender(Model):
@@ -696,6 +699,9 @@ class Meeting(Model, MeetingModelMixin):
     speaker_ids = fields.RelationListField(
         to={"speaker": "meeting_id"}, on_delete=fields.OnDelete.CASCADE
     )
+    office_ids = fields.RelationListField(
+        to={"office": "meeting_id"}, on_delete=fields.OnDelete.CASCADE
+    )
     topic_ids = fields.RelationListField(
         to={"topic": "meeting_id"}, on_delete=fields.OnDelete.CASCADE
     )
@@ -940,6 +946,21 @@ class StructureLevel(Model):
     meeting_id = fields.RelationField(
         to={"meeting": "structure_level_ids"}, required=True
     )
+
+
+class Office(Model):
+    collection = "office"
+    verbose_name = "office"
+
+    id = fields.IntegerField(required=True, constant=True)
+    name = fields.CharField(required=True)
+    meeting_user_ids = fields.RelationListField(
+        to={"meeting_user": "office_ids"}, equal_fields="meeting_id"
+    )
+    speaker_ids = fields.RelationListField(
+        to={"speaker": "office_id"}, equal_fields="meeting_id"
+    )
+    meeting_id = fields.RelationField(to={"meeting": "office_ids"}, required=True)
 
 
 class Group(Model):
@@ -1286,6 +1307,9 @@ class Speaker(Model):
     )
     point_of_order_category_id = fields.RelationField(
         to={"point_of_order_category": "speaker_ids"}, equal_fields="meeting_id"
+    )
+    office_id = fields.RelationField(
+        to={"office": "speaker_ids"}, equal_fields="meeting_id"
     )
     meeting_id = fields.RelationField(
         to={"meeting": "speaker_ids"}, required=True, constant=True

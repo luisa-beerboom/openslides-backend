@@ -29,6 +29,7 @@ class ParticipantJsonUpload(BaseUserJsonUpload, ParticipantCommon):
             ),
             "is_present": {"type": "boolean"},
             "structure_level": str_list_schema,
+            "office": str_list_schema,
             "groups": str_list_schema,
         },
     )
@@ -37,6 +38,12 @@ class ParticipantJsonUpload(BaseUserJsonUpload, ParticipantCommon):
     ] + [
         {
             "property": "structure_level",
+            "type": "string",
+            "is_object": True,
+            "is_list": True,
+        },
+        {
+            "property": "office",
             "type": "string",
             "is_object": True,
             "is_list": True,
@@ -64,6 +71,10 @@ class ParticipantJsonUpload(BaseUserJsonUpload, ParticipantCommon):
                 {
                     "name": "structure levels created",
                     "value": len(self.missing_field_values.get("structure_level", [])),
+                },
+                {
+                    "name": "offices created",
+                    "value": len(self.missing_field_values.get("office", [])),
                 },
                 {
                     "name": "groups created",
@@ -102,6 +113,9 @@ class ParticipantJsonUpload(BaseUserJsonUpload, ParticipantCommon):
             entry, "structure_level", messages, True
         )
 
+        # validate structure level
+        _, office_objects = self.validate_with_lookup(entry, "office", messages, True)
+
         payload_index = entry.pop("payload_index", None)
         # swapping needed for get_failing_fields and setting import states not to fail
         if entry.get("gender"):
@@ -109,6 +123,7 @@ class ParticipantJsonUpload(BaseUserJsonUpload, ParticipantCommon):
         failing_fields = self.permission_check.get_failing_fields(entry)
         entry.pop("group_ids")
         entry.pop("structure_level_ids")
+        entry.pop("office_ids")
         entry.pop("meeting_id")
 
         if not entry.get("id"):
@@ -141,6 +156,8 @@ class ParticipantJsonUpload(BaseUserJsonUpload, ParticipantCommon):
             entry["groups"] = group_objects
         if structure_level_objects:
             entry["structure_level"] = structure_level_objects
+        if office_objects:
+            entry["office"] = office_objects
         if vote_weight := entry.get("vote_weight"):
             if (
                 vote_weight["value"] == "0.000000"
@@ -204,7 +221,7 @@ class ParticipantJsonUpload(BaseUserJsonUpload, ParticipantCommon):
         super().setup_lookups(data)
         meeting = self.datastore.get(
             fqid_from_collection_and_id("meeting", self.meeting_id),
-            ["group_ids", "structure_level_ids"],
+            ["group_ids", "structure_level_ids", "office_ids"],
         )
         result = self.datastore.get_many(
             [
@@ -223,6 +240,11 @@ class ParticipantJsonUpload(BaseUserJsonUpload, ParticipantCommon):
                     meeting.get("structure_level_ids", []),
                     ["name", "id"],
                 ),
+                GetManyRequest(
+                    "office",
+                    meeting.get("office_ids", []),
+                    ["name", "id"],
+                ),
             ]
         )
         result["group"] = {
@@ -230,7 +252,7 @@ class ParticipantJsonUpload(BaseUserJsonUpload, ParticipantCommon):
             for id_, group in result["group"].items()
             if not group.get("anonymous_group_for_meeting_id")
         }
-        for collection in ("group", "structure_level"):
+        for collection in ("group", "structure_level", "office"):
             self.lookups[collection] = self.create_lookup(result[collection].values())
         for group in result["group"].values():
             if group.get("default_group_for_meeting_id"):

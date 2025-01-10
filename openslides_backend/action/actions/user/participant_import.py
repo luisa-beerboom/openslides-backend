@@ -7,6 +7,7 @@ from ...mixins.import_mixins import ImportRow, ImportState
 from ...util.register import register_action
 from ...util.typing import ActionData
 from ..group.create import GroupCreate
+from ..office.create import OfficeCreate
 from ..structure_level.create import StructureLevelCreateAction
 from .base_import import BaseUserImport
 from .participant_common import ParticipantCommon
@@ -27,6 +28,7 @@ class ParticipantImport(BaseUserImport, ParticipantCommon):
     def update_instance(self, instance: dict[str, Any]) -> dict[str, Any]:
         self.update_models_to_create("group", "groups")
         self.update_models_to_create("structure_level", "structure_level")
+        self.update_models_to_create("office", "office")
         instance = super().update_instance(instance)
         return instance
 
@@ -64,7 +66,7 @@ class ParticipantImport(BaseUserImport, ParticipantCommon):
 
     def handle_create_relations(self, instance: dict[str, Any]) -> None:
         if self.import_state != ImportState.ERROR:
-            for field in ["structure_level", "groups"]:
+            for field in ["structure_level", "groups", "office"]:
                 singular_field = field.rstrip("s")
                 if len(self.models_to_create.get(field, [])) or len(
                     self.newly_found_models.get(field, {})
@@ -78,7 +80,7 @@ class ParticipantImport(BaseUserImport, ParticipantCommon):
                             (
                                 StructureLevelCreateAction
                                 if field == "structure_level"
-                                else GroupCreate
+                                else OfficeCreate if field == "office" else GroupCreate
                             ),
                             [
                                 {"name": name, "meeting_id": self.meeting_id}
@@ -128,6 +130,7 @@ class ParticipantImport(BaseUserImport, ParticipantCommon):
             )
         groups = entry.pop("groups", None)
         structure_levels = entry.pop("structure_level", None)
+        offices = entry.pop("office", None)
         entry["group_ids"] = [
             group_id for group in groups if (group_id := group.get("id"))
         ]
@@ -136,6 +139,10 @@ class ParticipantImport(BaseUserImport, ParticipantCommon):
                 structure_level_id
                 for structure_level in structure_levels
                 if (structure_level_id := structure_level.get("id"))
+            ]
+        if offices:
+            entry["office_ids"] = [
+                office_id for office in offices if (office_id := office.get("id"))
             ]
 
         failing_fields = self.permission_check.get_failing_fields(entry)
@@ -162,11 +169,14 @@ class ParticipantImport(BaseUserImport, ParticipantCommon):
                 entry[field]["info"] = ImportState.ERROR
         entry.pop("group_ids")
         entry.pop("structure_level_ids", None)
+        entry.pop("office_ids", None)
         entry["groups"] = groups
         if structure_levels:
             entry["structure_level"] = structure_levels
+        if offices:
+            entry["office"] = offices
 
-        for field in ("groups", "structure_level"):
+        for field in ("groups", "structure_level", "office"):
             valid = False
             if field in entry:
                 singular_field = field.rstrip("s")
@@ -231,7 +241,7 @@ class ParticipantImport(BaseUserImport, ParticipantCommon):
 
     def setup_lookups(self) -> None:
         super().setup_lookups()
-        for field in ("groups", "structure_level"):
+        for field in ("groups", "structure_level", "office"):
             singular_field = field.rstrip("s")
             result = self.datastore.get_many(
                 [
