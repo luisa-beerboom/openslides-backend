@@ -1,3 +1,4 @@
+from collections import defaultdict
 from typing import Any, cast
 
 from datastore.migrations import BaseModelMigration
@@ -10,7 +11,10 @@ from openslides_backend.models.fields import (
     GenericRelationField,
     GenericRelationListField,
 )
-from openslides_backend.shared.patterns import collection_and_id_from_fqid
+from openslides_backend.shared.patterns import (
+    collection_and_id_from_fqid,
+    fqid_from_collection_and_id,
+)
 
 from ...shared.filters import And, FilterOperator
 from ..exceptions import MigrationException
@@ -40,6 +44,7 @@ class Migration(BaseModelMigration):
             field_def1,
             field_def2,
         ) in relations.items():
+            self.fqid_to_logs: dict[str, list] = defaultdict(list)
             affected_models1, affected_models2 = self.get_affected_models(
                 collection1,
                 field1,
@@ -60,6 +65,10 @@ class Migration(BaseModelMigration):
                 affected_models2,
             )
             for match in matches:
+                fqid1 = fqid_from_collection_and_id(collection1, match[0])
+                fqid2 = fqid_from_collection_and_id(collection2, match[1])
+                self.fqid_to_logs[fqid1].append(f"Matched with {fqid2}")
+                self.fqid_to_logs[fqid2].append(f"Matched with {fqid1}")
                 if error := self.check_equal_data(
                     match,
                     collection1,
@@ -70,7 +79,17 @@ class Migration(BaseModelMigration):
                     affected_models2,
                     eq_fields,
                 ):
-                    errors.add(error)
+                    log_str1 = "\n    * ".join(self.fqid_to_logs[fqid1])
+                    log_str2 = "\n    * ".join(self.fqid_to_logs[fqid2])
+                    errors.add(
+                        error
+                        + "\n  -> RELATION DATA: "
+                        + f"\n    * EQUAL_FIELDS: {eq_fields}"
+                        + f"\n    * FIELD DEF FOR {collection1}/{field1}: {field_def1}"
+                        + f"\n    * FIELD DEF FOR {collection2}/{field2}: {field_def2}"
+                        + f"\n  -> LOGS FOR {fqid1}: [\n    * {log_str1}\n  ]"
+                        + f"\n  -> LOGS FOR {fqid2}: [\n    * {log_str2}\n  ]"
+                    )
         if len(errors):
             raise MigrationException(list(errors))
         return None
@@ -200,6 +219,14 @@ class Migration(BaseModelMigration):
         affected_models2 = self.get_initial_affected_models(
             collection2, field2, eq_fields
         )
+        for id_, model in affected_models1.items():
+            self.fqid_to_logs[fqid_from_collection_and_id(collection1, id_)].append(
+                f"Found relation in model: {model}."
+            )
+        for id_, model in affected_models2.items():
+            self.fqid_to_logs[fqid_from_collection_and_id(collection2, id_)].append(
+                f"Found relation in model: {model}."
+            )
         self.update_affected_models(
             collection1,
             field1,
@@ -218,6 +245,14 @@ class Migration(BaseModelMigration):
             affected_models1,
             eq_fields,
         )
+        for id_, model in affected_models1.items():
+            self.fqid_to_logs[fqid_from_collection_and_id(collection1, id_)].append(
+                f"Loaded data: {model}."
+            )
+        for id_, model in affected_models2.items():
+            self.fqid_to_logs[fqid_from_collection_and_id(collection2, id_)].append(
+                f"Loaded data: {model}."
+            )
         return affected_models1, affected_models2
 
     def get_initial_affected_models(
@@ -393,7 +428,8 @@ class Migration(BaseModelMigration):
         sorted_eqfs: tuple[str, ...],
     ) -> tuple[Any, ...]:
         model = affected_models.get(id_, {})
-        return tuple(
+        fqid = fqid_from_collection_and_id(collection, id_)
+        tup = tuple(
             [
                 (
                     id_
@@ -403,3 +439,5 @@ class Migration(BaseModelMigration):
                 for eq_field in sorted_eqfs
             ]
         )
+        self.fqid_to_logs[fqid].append(f"Equal_fields for {fqid} are {tup}")
+        return tup
